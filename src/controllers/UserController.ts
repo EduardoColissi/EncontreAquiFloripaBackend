@@ -14,32 +14,47 @@ type UserInterface = {
 };
 
 export default class UserController {
-  async create(req: Request, res: Response){
+  async create(req: Request, res: Response) {
     try {
-        const { nome, cpf, email, celular, senha } = req.body;
-        const errors = validationResult(req);
+      const { nome, cpf, email, celular, senha } = req.body;
+      const errors = validationResult(req);
 
-        if (!errors.isEmpty()){
-            return res.status(400).json({ errors: errors.array() });
-        }
+      if (!errors.isEmpty()) {
+        return res.status(400).json({ errors: errors.array() });
+      }
 
-        let userExists = await prismaClient.user.findUnique({ where: { email } });
+      let userExists = await prismaClient.user.findUnique({ where: { email } });
 
-        if (userExists){
-            return res.status(422).json({ message: "Usuário já cadastrado" });
-        }
+      if (userExists) {
+        return res.status(422).json({ message: "Usuário já cadastrado" });
+      }
 
-        const hashPassword = await hash(senha, 8);
+      const hashPassword = await hash(senha, 8);
 
-        const newUser = await prismaClient.user.create({
-            data: <UserInterface>{
-                nome,
-                cpf,
-                email,
-                celular,
-                senha: hashPassword
-            },
-        });
+      const newUser = await prismaClient.user.create({
+        data: <UserInterface>{
+          nome,
+          cpf,
+          email,
+          celular,
+          senha: hashPassword,
+        },
+      });
+
+      const isValidPassword = await compare(senha, newUser.senha);
+
+      if (!isValidPassword) {
+        return res.status(422).json({ message: "Senha inválida" });
+      }
+
+      const token = sign({ id: newUser.id }, process.env.JWT_KEY as string, {
+        expiresIn: "1h",
+      });
+
+      res.status(201).json({ newUser, token });
+    } catch (error) {
+      console.log(error);
+      res.status(500).json({ message: "Erro interno ao cadastrar usuário" });
     }
   }
 }
